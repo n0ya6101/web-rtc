@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Low-Bandwidth Lecture Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #localVideo { transform: scaleX(-1); -webkit-transform: scaleX(-1); }
+        #remoteVideo { transform: scaleX(1); -webkit-transform: scaleX(1); }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400">Low-Bandwidth Lecture Platform</h1>
+            <p class="text-gray-400 mt-2">A WebRTC implementation with adaptive video quality for challenging networks.</p>
+        </header>
+
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+             <div id="status" class="text-lg font-medium bg-gray-700 px-4 py-2 rounded-md">Status: Idle</div>
+             <div class="flex gap-3">
+                <button id="startButton" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Start Camera</button>
+                <button id="connectButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors" disabled>Connect Peers</button>
+                <button id="hangupButton" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors" disabled>Hang Up</button>
+             </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-2 text-center">Your View</h2>
+                <video id="localVideo" playsinline autoplay muted class="w-full h-auto bg-black rounded-md"></video>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-2 text-center">Remote View</h2>
+                <video id="remoteVideo" playsinline autoplay class="w-full h-auto bg-black rounded-md"></video>
+            </div>
+        </div>
+
+        <div id="statsBox" class="bg-gray-800 p-4 rounded-lg shadow-lg hidden">
+            <h2 class="text-xl font-semibold mb-3 text-cyan-400">Live Network & Quality Stats</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div><p class="text-gray-400 text-sm">Est. Bandwidth</p><p id="bandwidthStat" class="font-mono text-lg">--- kbps</p></div>
+                <div><p class="text-gray-400 text-sm">Packet Loss</p><p id="packetLossStat" class="font-mono text-lg">--- %</p></div>
+                <div><p class="text-gray-400 text-sm">Round-Trip Time</p><p id="rttStat" class="font-mono text-lg">--- ms</p></div>
+                <div><p class="text-gray-400 text-sm">Current Quality</p><p id="qualityStat" class="font-mono text-lg">---</p></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+class AdaptiveQualityManager {
+    constructor(peerConnection, onQualityChange) {
+        this.pc = peerConnection;
+        this.onQualityChange = onQualityChange;
+        this.monitoringInterval = null;
+        this.qualityLevels = [
+            { name: 'ultralow', videoBitrate: 50000, audioBitrate: 8000, fps: 10, resolution: '320x240' },
+            { name: 'low', videoBitrate: 100000, audioBitrate: 16000, fps: 15, resolution: '480x360' },
+            { name: 'medium', videoBitrate: 250000, audioBitrate: 32000, fps: 25, resolution: '640x480' },
+            { name: 'high', videoBitrate: 500000, audioBitrate: 64000, fps: 30, resolution: '1280x720' }
+        ];
+        this.currentQualityIndex = 1;
+        this.currentStats = { bandwidth: 300000, packetLoss: 0, rtt: 50 };
+        this.config = { packetLossThresholdUp: 0.03, packetLossThresholdDown: 0.1, bandwidthSafetyFactor: 1.2 };
+    }
+    start() {
+        if (this.monitoringInterval) clearInterval(this.monitoringInterval);
+        this.monitoringInterval = setInterval(async () => {
+            if (this.pc.connectionState !== 'connected') return;
+            const stats = await this.pc.getStats(null);
+            this.analyzeStats(stats);
+            this.adaptQuality();
+        }, 2000);
+    }
+    stop() { if (this.monitoringInterval) clearInterval(this.monitoringInterval); }
+    getCurrentQuality() { return this.qualityLevels[this.currentQualityIndex]; }
+    analyzeStats(stats) {
+        let latestOutboundRtp = null;
+        stats.forEach(report => {
+            if (report.type === 'outbound-rtp' && report.mediaType === 'video') {
+                if (!latestOutboundRtp || report.timestamp > latestOutboundRtp.timestamp) latestOutboundRtp = report;
+            }
+            if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
+                this.currentStats.rtt = Math.round(report.currentRoundTripTime * 1000);
+            }
+        });
+        if (latestOutboundRtp) {
+            const totalPackets = latestOutboundRtp.packetsSent + latestOutboundRtp.packetsLost;
+            this.currentStats.packetLoss = totalPackets > 0 ? latestOutboundRtp.packetsLost / totalPackets : 0;
+            if (this.lastStats && this.lastStats.timestamp) {
+                const timeDiff = (latestOutboundRtp.timestamp - this.lastStats.timestamp) / 1000;
+                const bytesDiff = latestOutboundRtp.bytesSent - this.lastStats.bytesSent;
+                if (timeDiff > 0) this.currentStats.bandwidth = Math.round((bytesDiff * 8) / timeDiff);
+            }
+            this.lastStats = latestOutboundRtp;
+        }
+    }
+    adaptQuality() {
+        const currentQuality = this.qualityLevels[this.currentQualityIndex];
+        const totalBitrate = currentQuality.videoBitrate + currentQuality.audioBitrate;
+        if (this.currentStats.packetLoss > this.config.packetLossThresholdDown || this.currentStats.bandwidth < totalBitrate) {
+            if (this.currentQualityIndex > 0) {
+                this.currentQualityIndex--;
+                this.onQualityChange(this.getCurrentQuality());
+                console.log(`[ADAPT] Downgrading quality. New level: ${this.getCurrentQuality().name}`);
+            }
+        } else if (this.currentQualityIndex < this.qualityLevels.length - 1) {
+            const nextQuality = this.qualityLevels[this.currentQualityIndex + 1];
+            const nextTotalBitrate = nextQuality.videoBitrate + nextQuality.audioBitrate;
+            if (this.currentStats.packetLoss < this.config.packetLossThresholdUp && this.currentStats.bandwidth > nextTotalBitrate * this.config.bandwidthSafetyFactor) {
+                 this.currentQualityIndex++;
+                 this.onQualityChange(this.getCurrentQuality());
+                 console.log(`[ADAPT] Upgrading quality. New level: ${this.getCurrentQuality().name}`);
+            }
+        }
+    }
+}
+
+class LecturePlatform {
+    constructor() {
+        this.startButton = document.getElementById('startButton');
+        this.connectButton = document.getElementById('connectButton');
+        this.hangupButton = document.getElementById('hangupButton');
+        this.localVideo = document.getElementById('localVideo');
+        this.remoteVideo = document.getElementById('remoteVideo');
+        this.statusDiv = document.getElementById('status');
+        this.statsBox = document.getElementById('statsBox');
+        this.pc = null;
+        this.localStream = null;
+        this.qualityManager = null;
+        this.statsInterval = null;
+        this.ws = null;
+
+        this.iceConfiguration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+                { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
+            ]
+        };
+        this.bindEvents();
+    }
+
+    bindEvents() {
+        this.startButton.onclick = () => this.start();
+        this.connectButton.onclick = () => this.connect();
+        this.hangupButton.onclick = () => this.hangup();
+    }
+
+    updateStatus(text) { this.statusDiv.textContent = `Status: ${text}`; }
+
+    async start() {
+        this.startButton.disabled = true;
+        this.updateStatus("Requesting camera access...");
+        try {
+            const initialQuality = new AdaptiveQualityManager().getCurrentQuality();
+            const [width, height] = initialQuality.resolution.split('x').map(Number);
+            this.localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: initialQuality.fps } }, audio: true });
+            this.localVideo.srcObject = this.localStream;
+            this.connectButton.disabled = false;
+            this.updateStatus("Camera started. Ready to connect.");
+        } catch (e) {
+            console.error('getUserMedia() error:', e);
+            this.updateStatus("Failed to access camera.");
+            this.startButton.disabled = false;
+        }
+    }
+
+    setupSignaling() {
+        // !!! IMPORTANT: This URL must be the public address of your deployed server !!!
+        const serverUrl = 'wss://your-unique-server-name.onrender.com'; // <-- EDIT THIS
+        
+        this.ws = new WebSocket(serverUrl);
+
+        this.ws.onopen = () => console.log('Connected to signaling server.');
+
+        this.ws.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+            if (data.offer) {
+                if (!this.pc) this.connect(false); // Connect as the receiver
+                await this.pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await this.pc.createAnswer();
+                await this.pc.setLocalDescription(answer);
+                this.ws.send(JSON.stringify({ 'answer': this.pc.localDescription }));
+            } else if (data.answer) {
+                await this.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } else if (data.candidate) {
+                try { await this.pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) { console.error('Error adding received ice candidate', e); }
+            }
+        };
+        this.ws.onerror = (err) => { console.error('Signaling server error:', err); this.updateStatus('Signaling connection failed!'); };
+    }
+
+    async connect(isInitiator = true) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) this.setupSignaling();
+        
+        this.connectButton.disabled = true;
+        this.hangupButton.disabled = false;
+        this.statsBox.classList.remove('hidden');
+        this.pc = new RTCPeerConnection(this.iceConfiguration);
+
+        this.pc.onicecandidate = e => e.candidate && this.ws.send(JSON.stringify({ 'candidate': e.candidate }));
+        this.pc.ontrack = e => {
+            if (this.remoteVideo.srcObject !== e.streams[0]) {
+                this.remoteVideo.srcObject = e.streams[0];
+                this.updateStatus("Connected!");
+            }
+        };
+        
+        this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
+        
+        this.qualityManager = new AdaptiveQualityManager(this.pc, (newQuality) => this.updateVideoConstraints(newQuality));
+        this.qualityManager.start();
+        
+        if (isInitiator) {
+            try {
+                const offer = await this.pc.createOffer();
+                await this.pc.setLocalDescription(offer);
+                this.ws.send(JSON.stringify({ 'offer': this.pc.localDescription }));
+            } catch (e) { console.error('Failed to create offer:', e); this.updateStatus("Connection failed."); }
+        }
+        
+        this.startStatsDisplay();
+    }
+
+    async updateVideoConstraints(quality) {
+        const [width, height] = quality.resolution.split('x').map(Number);
+        const sender = this.pc.getSenders().find(s => s.track.kind === 'video');
+        if (!sender || !sender.track) return;
+        try {
+            await sender.track.applyConstraints({ width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: quality.fps } });
+            const parameters = sender.getParameters();
+            parameters.encodings = parameters.encodings || [{}];
+            parameters.encodings[0].maxBitrate = quality.videoBitrate;
+            await sender.setParameters(parameters);
+        } catch(e) { console.error("Error applying constraints: ", e); }
+    }
+
+    startStatsDisplay() {
+        if (this.statsInterval) clearInterval(this.statsInterval);
+        this.statsInterval = setInterval(() => {
+            if (!this.qualityManager) return;
+            const stats = this.qualityManager.currentStats;
+            const quality = this.qualityManager.getCurrentQuality();
+            document.getElementById('bandwidthStat').textContent = `${Math.round(stats.bandwidth / 1000)} kbps`;
+            document.getElementById('packetLossStat').textContent = `${(stats.packetLoss * 100).toFixed(2)} %`;
+            document.getElementById('rttStat').textContent = `${stats.rtt} ms`;
+            document.getElementById('qualityStat').textContent = quality.name;
+        }, 1000);
+    }
+
+    hangup() {
+        this.updateStatus("Hanging up...");
+        if (this.qualityManager) this.qualityManager.stop();
+        if (this.statsInterval) clearInterval(this.statsInterval);
+        if (this.pc) this.pc.close();
+        if (this.ws) this.ws.close();
+        this.pc = null;
+        this.ws = null;
+        this.remoteVideo.srcObject = null;
+        this.hangupButton.disabled = true;
+        this.connectButton.disabled = false;
+        this.statsBox.classList.add('hidden');
+        this.updateStatus("Ready");
+    }
+}
+const lectureApp = new LecturePlatform();
+</script>
+</body>
+</html>
