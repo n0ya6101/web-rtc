@@ -1,13 +1,13 @@
 {
-  "name": "webrtc-signaling-server",
+  "name": "multi-party-conference-server",
   "version": "1.0.0",
-  "description": "Simple signaling server for WebRTC",
+  "description": "Signaling server for a multi-party WebRTC conference",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "ws": "^8.17.0"
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
   }
 }
