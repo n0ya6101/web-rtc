@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const joinSection = document.getElementById('join-section');
     const roomNameInput = document.getElementById('room-name');
     const joinButton = document.getElementById('join-button');
+    const enableCameraCheckbox = document.getElementById('enable-camera-checkbox');
+    const enableMicCheckbox = document.getElementById('enable-mic-checkbox');
     const controlsSection = document.getElementById('controls-section');
     const roomDisplay = document.getElementById('room-display');
     const videoGrid = document.getElementById('video-grid');
@@ -16,8 +18,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let localStream;
     let roomName;
     const peerConnections = {}; // Key: socketId of remote user, Value: RTCPeerConnection
-    let isMicMuted = false;
-    let isVideoEnabled = true;
 
     // --- ICE SERVER CONFIGURATION ---
     const iceConfiguration = {
@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     joinButton.addEventListener('click', () => {
         const rn = roomNameInput.value.trim();
         if (rn) {
-            joinRoom(rn);
+            joinRoom(rn, enableCameraCheckbox.checked, enableMicCheckbox.checked);
         }
     });
     toggleMicButton.addEventListener('click', toggleMic);
@@ -42,28 +42,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- CORE LOGIC ---
 
-    async function joinRoom(rn) {
+    async function joinRoom(rn, startWithVideo, startWithAudio) {
         roomName = rn;
         joinSection.style.display = 'none';
         controlsSection.style.display = 'flex';
         roomDisplay.textContent = roomName;
 
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-            const localVideoElement = createVideoElement(socket ? socket.id : 'local', localStream, true);
-            videoGrid.appendChild(localVideoElement);
-            // If we get the stream, we can connect the socket
-            connectSocket();
-        } catch (error) {
-            console.error("Error accessing media devices.", error);
-            // NEW: Enhanced error handling
-            handleMediaError(error);
-            leaveRoom(); // Revert UI changes
-            return;
+        connectSocket();
+
+        if (startWithVideo || startWithAudio) {
+            try {
+                const constraints = { video: startWithVideo, audio: startWithAudio };
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log("Media stream obtained.");
+
+                const localVideoElement = createVideoElement('local', localStream, true);
+                videoGrid.appendChild(localVideoElement);
+                
+                toggleVideoButton.disabled = !startWithVideo;
+                toggleMicButton.disabled = !startWithAudio;
+                
+                if (!startWithVideo) localStream.getVideoTracks()[0].enabled = false;
+                if (!startWithAudio) localStream.getAudioTracks()[0].enabled = false;
+
+            } catch (error) {
+                console.error("Error accessing media devices.", error);
+                handleMediaError(error);
+                // Allow joining the room as a spectator even if media fails
+            }
+        } else {
+             console.log("Joining as a spectator.");
         }
     }
-
-    // NEW: Function to provide specific feedback for media errors
+    
     function handleMediaError(error) {
         let errorMessage = "Could not access camera and microphone. Please check your hardware and browser settings.";
         switch(error.name) {
@@ -83,9 +94,28 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(errorMessage);
     }
 
-
     function connectSocket() {
-        // --- ... existing connectSocket logic ... ---
+        socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to signaling server with ID:', socket.id);
+            socket.emit('join-room', roomName, socket.id);
+        });
+        
+        socket.on('existing-users', (userIds) => {
+            console.log('Existing users in room:', userIds);
+            userIds.forEach(userId => {
+                peerConnections[userId] = createPeerConnection(userId, true);
+            });
+        });
+
+        socket.on('user-connected', (userId) => {
+            console.log('New user connected:', userId);
+            peerConnections[userId] = createPeerConnection(userId, false);
+        });
+
+        socket.on('offer', handleOffer);
+        socket.on('answer', handleAnswer);
         socket.on('ice-candidate', handleIceCandidate);
 
         socket.on('user-disconnected', (userId) => {
@@ -105,9 +135,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Creating peer connection to ${targetUserId}, initiator: ${isInitiator}`);
         const pc = new RTCPeerConnection(iceConfiguration);
 
-        localStream.getTracks().forEach(track => {
-            pc.addTrack(track, localStream);
-        });
+        // Add local tracks if they exist
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+        }
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -120,10 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         pc.ontrack = (event) => {
-            let videoElement = document.getElementById(targetUserId);
-            if (!videoElement) {
-                videoElement = createVideoElement(targetUserId, event.streams[0]);
-                videoGrid.appendChild(videoElement);
+            let videoContainer = document.getElementById(targetUserId);
+            if (!videoContainer) {
+                videoContainer = createVideoElement(targetUserId, event.streams[0]);
+                videoGrid.appendChild(videoContainer);
             }
         };
 
@@ -185,9 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
         video.srcObject = stream;
         video.autoplay = true;
         video.playsInline = true;
-        if (isLocal) {
-            video.muted = true;
-        } else {
+        video.muted = isLocal;
+        if (!isLocal) {
             video.classList.add('remote-video');
         }
         videoContainer.appendChild(video);
@@ -195,17 +227,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function toggleMic() {
-        isMicMuted = !isMicMuted;
-        localStream.getAudioTracks()[0].enabled = !isMicMuted;
-        toggleMicButton.textContent = isMicMuted ? 'Unmute Mic' : 'Mute Mic';
-        toggleMicButton.classList.toggle('bg-red-500', isMicMuted);
+        if (!localStream) return;
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (!audioTrack) return;
+        
+        audioTrack.enabled = !audioTrack.enabled;
+        const isMuted = !audioTrack.enabled;
+        toggleMicButton.textContent = isMuted ? 'Unmute Mic' : 'Mute Mic';
+        toggleMicButton.classList.toggle('bg-red-500', isMuted);
+        toggleMicButton.classList.toggle('bg-blue-500', !isMuted);
     }
 
     function toggleVideo() {
-        isVideoEnabled = !isVideoEnabled;
-        localStream.getVideoTracks()[0].enabled = isVideoEnabled;
-        toggleVideoButton.textContent = isVideoEnabled ? 'Disable Video' : 'Enable Video';
-        toggleVideoButton.classList.toggle('bg-red-500', !isVideoEnabled);
+        if (!localStream) return;
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+
+        videoTrack.enabled = !videoTrack.enabled;
+        const isEnabled = videoTrack.enabled;
+        toggleVideoButton.textContent = isEnabled ? 'Disable Video' : 'Enable Video';
+        toggleVideoButton.classList.toggle('bg-red-500', !isEnabled);
+        toggleVideoButton.classList.toggle('bg-blue-500', isEnabled);
     }
 
     function leaveRoom() {
@@ -213,12 +255,16 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.disconnect();
         }
         for (const userId in peerConnections) {
-            peerConnections[userId].close();
+            if (peerConnections[userId]) {
+                peerConnections[userId].close();
+            }
         }
-        const peerConnections = {};
+        // Reset state
+        Object.keys(peerConnections).forEach(key => delete peerConnections[key]);
 
         if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
         }
 
         videoGrid.innerHTML = '';

@@ -20,9 +20,22 @@
         </header>
 
         <!-- Join Room Section -->
-        <div id="join-section" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <input type="text" id="room-name" placeholder="Enter Room Name" class="bg-gray-700 text-white px-4 py-2 rounded-md border-2 border-gray-600 focus:border-cyan-500 focus:outline-none">
-            <button id="join-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Join Room</button>
+        <div id="join-section" class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col items-center justify-center gap-4">
+            <input type="text" id="room-name" placeholder="Enter Room Name" class="bg-gray-700 text-white px-4 py-2 w-full max-w-xs rounded-md border-2 border-gray-600 focus:border-cyan-500 focus:outline-none">
+            
+            <!-- NEW: Media selection checkboxes -->
+            <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="enable-camera-checkbox" class="h-5 w-5 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600" checked>
+                    <span>Enable Camera</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="enable-mic-checkbox" class="h-5 w-5 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600" checked>
+                    <span>Enable Mic</span>
+                </label>
+            </div>
+
+            <button id="join-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition-colors text-lg">Join Room</button>
         </div>
         
         <!-- Main Controls (hidden initially) -->
@@ -31,8 +44,8 @@
                 <span class="text-lg font-medium">Room: <b id="room-display" class="text-cyan-400"></b></span>
             </div>
             <div class="flex flex-wrap gap-3 justify-center">
-                <button id="toggle-mic-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Mute Mic</button>
-                <button id="toggle-video-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Disable Video</button>
+                <button id="toggle-mic-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>Mute Mic</button>
+                <button id="toggle-video-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>Disable Video</button>
                 <button id="share-screen-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Share Screen</button>
                 <button id="leave-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Leave Room</button>
             </div>
@@ -40,13 +53,12 @@
 
         <!-- Video Grid -->
         <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <!-- Local video will be added here -->
-            <!-- Remote videos will be added here -->
+            <!-- Video elements will be added here by app.js -->
         </div>
     </div>
 
-    <!-- Client-side library for Mediasoup -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>
+
