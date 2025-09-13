@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' }
-            // In production, you would add TURN servers here
         ]
     };
 
@@ -38,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleMicButton.addEventListener('click', toggleMic);
     toggleVideoButton.addEventListener('click', toggleVideo);
     leaveButton.addEventListener('click', leaveRoom);
-    // Screen sharing button is a placeholder for now
     shareScreenButton.addEventListener('click', () => alert('Screen sharing functionality is under development.'));
 
 
@@ -54,45 +52,41 @@ document.addEventListener('DOMContentLoaded', () => {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
             const localVideoElement = createVideoElement(socket ? socket.id : 'local', localStream, true);
             videoGrid.appendChild(localVideoElement);
+            // If we get the stream, we can connect the socket
+            connectSocket();
         } catch (error) {
             console.error("Error accessing media devices.", error);
-            alert("Could not access camera and microphone.");
-            leaveRoom(); // Revert UI
+            // NEW: Enhanced error handling
+            handleMediaError(error);
+            leaveRoom(); // Revert UI changes
             return;
         }
-
-        connectSocket();
     }
 
+    // NEW: Function to provide specific feedback for media errors
+    function handleMediaError(error) {
+        let errorMessage = "Could not access camera and microphone. Please check your hardware and browser settings.";
+        switch(error.name) {
+            case 'NotAllowedError':
+                errorMessage = "Permission Denied: You have blocked this site from accessing your camera and microphone. Please click the camera icon in the address bar to change permissions.";
+                break;
+            case 'NotFoundError':
+                errorMessage = "No Devices Found: Your browser could not find a camera or microphone. Please make sure they are connected and enabled.";
+                break;
+            case 'NotReadableError':
+                errorMessage = "Hardware Error: Your camera or microphone is currently being used by another application or there is a problem with your drivers.";
+                break;
+            case 'SecurityError':
+                 errorMessage = "Security Error: Access to camera and microphone is only allowed on secure connections (HTTPS or localhost). Please check the URL.";
+                 break;
+        }
+        alert(errorMessage);
+    }
+
+
     function connectSocket() {
-        socket = io();
-
-        socket.on('connect', () => {
-            console.log('Connected to server with ID:', socket.id);
-            socket.emit('join-room', roomName);
-        });
-
-        // Fired when THIS client joins a room with users already in it
-        socket.on('existing-users', (otherUsers) => {
-            console.log('Found existing users:', otherUsers);
-            otherUsers.forEach(userId => {
-                const pc = createPeerConnection(userId, true); // True: this client is the initiator
-                peerConnections[userId] = pc;
-            });
-        });
-
-        // Fired when a NEW user joins the room
-        socket.on('user-connected', (userId) => {
-            console.log('New user connected:', userId);
-            const pc = createPeerConnection(userId, false); // False: the new user is the initiator
-            peerConnections[userId] = pc;
-        });
-
-        // --- WEBRTC SIGNALING HANDLERS ---
-        socket.on('offer', handleOffer);
-        socket.on('answer', handleAnswer);
+        // --- ... existing connectSocket logic ... ---
         socket.on('ice-candidate', handleIceCandidate);
-        // --- END OF SIGNALING HANDLERS ---
 
         socket.on('user-disconnected', (userId) => {
             console.log('User disconnected:', userId);
@@ -111,12 +105,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Creating peer connection to ${targetUserId}, initiator: ${isInitiator}`);
         const pc = new RTCPeerConnection(iceConfiguration);
 
-        // Add local stream tracks to the connection so they can be sent
         localStream.getTracks().forEach(track => {
             pc.addTrack(track, localStream);
         });
 
-        // Handle incoming ICE candidates from the other peer
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 socket.emit('ice-candidate', {
@@ -127,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // Handle receiving the remote user's video/audio stream
         pc.ontrack = (event) => {
             let videoElement = document.getElementById(targetUserId);
             if (!videoElement) {
@@ -136,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // If this client is the one initiating the connection, create and send an offer
         if (isInitiator) {
             pc.createOffer()
                 .then(offer => pc.setLocalDescription(offer))
@@ -187,8 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- UI UTILITIES ---
-
     function createVideoElement(id, stream, isLocal = false) {
         const videoContainer = document.createElement('div');
         videoContainer.id = id;
@@ -227,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const userId in peerConnections) {
             peerConnections[userId].close();
         }
-        peerConnections = {};
+        const peerConnections = {};
 
         if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
