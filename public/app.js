@@ -19,11 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let roomName;
     const peerConnections = {}; // Key: socketId of remote user, Value: RTCPeerConnection
 
-    // --- ICE SERVER CONFIGURATION ---
+    // --- ICE SERVER CONFIGURATION (UPDATED) ---
     const iceConfiguration = {
         iceServers: [
+            // STUN servers to help discover connection paths
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            // NEW: Added a free TURN server as a fallback relay
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject",
+            },
         ]
     };
 
@@ -273,4 +280,5 @@ document.addEventListener('DOMContentLoaded', () => {
         roomNameInput.value = '';
     }
 });
+
 
