@@ -11,176 +11,63 @@
         video { transform: scaleX(-1); -webkit-transform: scaleX(-1); }
         .remote-video { transform: scaleX(1); -webkit-transform: scaleX(1); }
         .aspect-video { aspect-ratio: 16 / 9; }
-        
-        /* Loading spinner */
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Connection status indicators */
-        .status-indicator {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-        
-        .status-connected { background-color: #10b981; }
-        .status-connecting { background-color: #f59e0b; }
-        .status-disconnected { background-color: #ef4444; }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex flex-col items-center min-h-screen p-4">
 
     <div class="w-full max-w-7xl mx-auto">
-        <header class="text-center mb-6">
+        <header class="text-center mb-4">
             <h1 class="text-3xl font-bold text-cyan-400">Multi-Party Conference Platform</h1>
-            <p class="text-gray-400 mt-2">Connect with multiple participants in real-time</p>
         </header>
 
         <!-- Join Room Section -->
         <div id="join-section" class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6 flex flex-col items-center justify-center gap-4">
-            <div class="w-full max-w-md">
-                <label for="room-name" class="block text-sm font-medium text-gray-300 mb-2">Room Name</label>
-                <input 
-                    type="text" 
-                    id="room-name" 
-                    placeholder="Enter a unique room name" 
-                    class="bg-gray-700 text-white px-4 py-3 w-full rounded-md border-2 border-gray-600 focus:border-cyan-500 focus:outline-none transition-colors"
-                    maxlength="50"
-                >
-            </div>
-            
-            <div class="flex flex-col sm:flex-row items-center gap-4 mt-2">
+            <input type="text" id="room-name" placeholder="Enter Room Name" class="bg-gray-700 text-white px-4 py-2 w-full max-w-xs rounded-md border-2 border-gray-600 focus:border-cyan-500 focus:outline-none">
+            <div class="flex items-center gap-4">
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" id="enable-camera-checkbox" class="h-5 w-5 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600" checked>
-                    <span class="text-sm">Enable Camera</span>
+                    <span>Enable Camera</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" id="enable-mic-checkbox" class="h-5 w-5 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600" checked>
-                    <span class="text-sm">Enable Microphone</span>
+                    <span>Enable Mic</span>
                 </label>
             </div>
-
-            <button 
-                id="join-button" 
-                class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-lg shadow-lg"
-            >
-                Join Room
-            </button>
-            
-            <div class="text-xs text-gray-500 text-center mt-2 max-w-md">
-                <p>By joining, you agree to share audio/video as selected. Ensure your browser allows camera and microphone access.</p>
-            </div>
+            <button id="join-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition-colors text-lg">Join Room</button>
         </div>
         
         <!-- Main Controls (hidden initially) -->
         <div id="controls-section" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 hidden">
-            <div class="text-center mb-4">
-                <span class="text-lg font-medium">Room: </span>
-                <span id="room-display" class="text-xl font-bold text-cyan-400"></span>
+             <div class="w-full text-center mb-3">
+                <span class="text-lg font-medium">Room: <b id="room-display" class="text-cyan-400"></b></span>
             </div>
-            
-            <div class="flex flex-wrap gap-3 justify-center items-center">
-                <button 
-                    id="toggle-mic-button" 
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]" 
-                    disabled
-                >
-                    Mute Mic
-                </button>
-                
-                <button 
-                    id="toggle-video-button" 
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]" 
-                    disabled
-                >
-                    Disable Video
-                </button>
-                
-                <button 
-                    id="share-screen-button" 
-                    class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors min-w-[120px]"
-                >
-                    Share Screen
-                </button>
-                
-                <button 
-                    id="leave-button" 
-                    class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors min-w-[120px]"
-                >
-                    Leave Room
-                </button>
-            </div>
-            
-            <div class="text-center mt-3">
-                <p class="text-sm text-gray-400">
-                    <span id="participant-count">0</span> participant(s) connected
-                </p>
+            <div class="flex flex-wrap gap-3 justify-center">
+                <button id="toggle-mic-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>Mute Mic</button>
+                <button id="toggle-video-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>Disable Video</button>
+                <button id="share-screen-button" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Share Screen</button>
+                <button id="leave-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Leave Room</button>
             </div>
         </div>
 
-        <!-- Connection Status -->
-        <div id="connection-status" class="bg-gray-800 p-3 rounded-lg shadow-lg mb-4 text-center hidden">
-            <div class="flex items-center justify-center gap-2">
-                <div class="spinner"></div>
-                <span id="status-text" class="text-sm text-gray-400">Connecting...</span>
+        <!-- NEW: Stats Display from previous version -->
+        <div id="statsBox" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-3 text-cyan-400">Live Network & Quality Stats</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div><p class="text-gray-400 text-sm">Est. Bandwidth</p><p id="bandwidthStat" class="font-mono text-lg">--- kbps</p></div>
+                <div><p class="text-gray-400 text-sm">Packet Loss</p><p id="packetLossStat" class="font-mono text-lg">--- %</p></div>
+                <div><p class="text-gray-400 text-sm">Round-Trip Time</p><p id="rttStat" class="font-mono text-lg">--- ms</p></div>
+                <div><p class="text-gray-400 text-sm">Current Quality</p><p id="qualityStat" class="font-mono text-lg">---</p></div>
             </div>
         </div>
 
         <!-- Video Grid -->
-        <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr">
+        <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <!-- Video elements will be added here by app.js -->
         </div>
-        
-        <!-- Empty State -->
-        <div id="empty-state" class="text-center py-12 hidden">
-            <div class="text-gray-500">
-                <svg class="mx-auto h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <h3 class="text-lg font-medium mb-2">Waiting for participants</h3>
-                <p class="text-sm">Share the room name with others to get started</p>
-            </div>
-        </div>
     </div>
 
-    <!-- Error Modal -->
-    <div id="error-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <div class="flex items-center mb-4">
-                <svg class="h-6 w-6 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.966-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                <h3 class="text-lg font-semibold text-white">Connection Error</h3>
-            </div>
-            <p id="error-message" class="text-gray-300 mb-4"></p>
-            <div class="flex justify-end gap-3">
-                <button id="error-retry" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors">
-                    Retry
-                </button>
-                <button id="error-close" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors">
-                    Close
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>
+
